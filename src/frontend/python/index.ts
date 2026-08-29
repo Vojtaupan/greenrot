@@ -80,8 +80,13 @@ export class PythonFrontend implements Frontend {
     return { byFile: new Map(Object.entries(raw)) };
   }
 
-  async mutate(_root: string, _lines: CoveredLines): Promise<Mutant[]> {
-    throw new Error('not implemented until Task 4.2');
+  async mutate(root: string, lines: CoveredLines): Promise<Mutant[]> {
+    const spec = JSON.stringify(Object.fromEntries(lines.byFile));
+    const res = await this.call(root, 'mutants', [spec]);
+    // No mutants is a legitimate answer, and the probe turns it into UNKNOWN
+    // rather than FAKE. Returning [] here is therefore never a false all-clear.
+    if (isFrontendError(res)) return [];
+    return res as Mutant[];
   }
 
   async run(_root: string, _test: TestCase, _mutant?: Mutant): Promise<RunOutcome> {

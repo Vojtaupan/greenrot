@@ -468,8 +468,61 @@ def cmd_runtest(root, test_id):
     return {"outcome": "error", "code": code, "detail": "pytest exit " + str(code)}
 
 
+_MUTATIONS = (
+    ("arith", ((" + ", " - "), (" - ", " + "), (" * ", " / "), (" // ", " * "))),
+    ("compare", ((" == ", " != "), (" != ", " == "), (" <= ", " > "), (" >= ", " < "),
+                 (" < ", " >= "), (" > ", " <= "))),
+    ("bool", ((" and ", " or "), (" or ", " and "), (" not ", " "))),
+    ("const", (("True", "False"), ("False", "True"), ("None", "0"))),
+)
+
+
+def cmd_mutants(root, spec_json):
+    """Generate mutants confined to the given lines.
+
+    Text-level and line-scoped on purpose: the probe only ever needs to perturb
+    lines a specific test executed, and a full AST rewrite would be far more
+    machinery for no additional proving power.
+    """
+    try:
+        spec = json.loads(spec_json or "{}")
+    except ValueError as exc:
+        return {"error": True, "code": "frontend-crash", "file": "", "line": 1,
+                "detail": "bad mutant spec: " + str(exc)}
+
+    out = []
+    for rel, lines in spec.items():
+        path = os.path.join(root, rel)
+        try:
+            with open(path, "r", encoding="utf-8") as fh:
+                src = fh.read().splitlines()
+        except OSError:
+            continue
+        wanted = set(lines)
+        for idx, text in enumerate(src, start=1):
+            if idx not in wanted:
+                continue
+            stripped = text.strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+            # A bare `def`/`class` header executes at import time and shows up
+            # as covered, but perturbing it tests nothing about behaviour.
+            if stripped.startswith(("def ", "class ", "@", "import ", "from ")):
+                continue
+            for operator, pairs in _MUTATIONS:
+                for find, repl in pairs:
+                    if find in text:
+                        out.append({
+                            "id": "{}:{}:{}:{}".format(rel, idx, operator, find.strip()),
+                            "file": rel, "line": idx, "original": text,
+                            "mutated": text.replace(find, repl, 1), "operator": operator,
+                        })
+                        break  # one mutant per operator family per line
+    return out
+
+
 HANDLERS = {"discover": cmd_discover, "model": cmd_model,
-            "trace": cmd_trace, "runtest": cmd_runtest}
+            "trace": cmd_trace, "runtest": cmd_runtest, "mutants": cmd_mutants}
 
 
 def main():
