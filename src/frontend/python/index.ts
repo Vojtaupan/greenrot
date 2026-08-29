@@ -2,6 +2,7 @@ import { execFile } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { locateInterpreter } from './locate.ts';
+import { withScratchCopy } from './scratch.ts';
 import {
   isFrontendError,
   type CoveredLines,
@@ -32,8 +33,12 @@ export class PythonFrontend implements Frontend {
     cmd: string,
     extra: string[] = [],
     timeoutMs = 120_000,
+    interpreter?: string,
   ): Promise<unknown> {
-    const py = locateInterpreter(root);
+    // `interpreter` exists because a scratch copy lives in TEMP, where walking
+    // up finds no virtualenv - the interpreter must be the one belonging to the
+    // repository under analysis, not to the throwaway directory holding a mutant.
+    const py = interpreter ?? locateInterpreter(root);
     if (!py) {
       return { error: true, code: 'runner-missing', file: '', line: 1,
                detail: 'no python interpreter found' } satisfies FrontendError;
@@ -89,7 +94,20 @@ export class PythonFrontend implements Frontend {
     return res as Mutant[];
   }
 
-  async run(_root: string, _test: TestCase, _mutant?: Mutant): Promise<RunOutcome> {
-    throw new Error('not implemented until Task 4.3');
+  async run(root: string, test: TestCase, mutant?: Mutant): Promise<RunOutcome> {
+    const py = locateInterpreter(root) ?? undefined;
+    const exec = async (r: string): Promise<RunOutcome> => {
+      const res = await this.call(r, 'runtest', [test.id], 60_000, py);
+      if (isFrontendError(res)) return 'error';
+      return (res as { outcome: RunOutcome }).outcome;
+    };
+    if (!mutant) return exec(root);
+    try {
+      return await withScratchCopy(root, mutant, exec);
+    } catch {
+      // A scratch copy that could not be made or written is an 'error', which
+      // the probe turns into UNKNOWN. It must never look like a survival.
+      return 'error';
+    }
   }
 }
