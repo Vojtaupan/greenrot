@@ -10,7 +10,7 @@ const A = (p: Partial<AssertionModel> = {}): AssertionModel => ({
 
 const M = (p: Partial<TestModel> = {}): TestModel => ({
   test: { id: 'f.py::t', file: 'f.py', line: 1, name: 't', skipped: false },
-  assertions: [A()], mocks: [], unitUnderTest: null, overMocked: false, ...p,
+  assertions: [A()], mocks: [], unitUnderTest: null, overMocked: false, productionCalls: 0, ...p,
 });
 
 test('A1: no assertion at all is structurally FAKE', () => {
@@ -99,4 +99,26 @@ test('B8: mocking the very thing under test is WEAK and owes a probe', () => {
   assert.equal(r.verdict.name, 'WEAK');
   assert.equal(r.verdict.evidence[0]!.check, 'B8-unit-under-test-mocked');
   assert.equal(r.obligations.length, 1);
+});
+
+// Regression: 3 of 3 false positives on the first real suite greenrot analysed
+// were the spy pattern - a container created empty in the test, handed to
+// production code via a callback, filled by it, then asserted on.
+test('A3 stands down when production code ran - the spy pattern is not fake', () => {
+  const r = triage(M({
+    assertions: [A({ origins: ['test-constructed', 'literal'] })],
+    productionCalls: 1,
+  }));
+  assert.notEqual(r.verdict.name, 'FAKE');
+  assert.equal(r.verdict.name, 'UNKNOWN');
+  assert.match(r.obligations[0]!.why, /spy/i);
+});
+
+test('A3 still fires when genuinely no production code runs', () => {
+  const r = triage(M({
+    assertions: [A({ origins: ['test-constructed', 'literal'] })],
+    productionCalls: 0,
+  }));
+  assert.equal(r.verdict.name, 'FAKE');
+  assert.equal(r.verdict.evidence[0]!.check, 'A3-test-constructed-only');
 });

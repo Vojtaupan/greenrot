@@ -304,10 +304,26 @@ def _model_function(fn, rel, imported=None):
     real_calls = sum(1 for n in ast.walk(fn) if isinstance(n, ast.Call))
     over_mocked = bool(table.mocks) and real_calls > 0 and len(table.mocks) * 2 >= real_calls
 
+    # Does this test call production code at all? Needed by check A3, whose
+    # claim is literally "production code never reached".
+    #
+    # Found by dogfooding on a real 449-test suite, where A3 produced three
+    # false positives, all the SPY pattern: a list created empty in the test,
+    # handed to production code through a callback, filled by it, then
+    # asserted on. The origin tracker sees `calls = []` and says
+    # test-constructed; it does not model mutation through a closure. Rather
+    # than try to track aliasing - which is where static analysis goes to die -
+    # A3 simply declines to fire whenever production code ran at all.
+    production_calls = sum(
+        1 for n in ast.walk(fn)
+        if isinstance(n, ast.Call) and table.classify(n) == "production-derived"
+    )
+
     return {"test": {"id": rel + "::" + fn.name, "file": rel, "line": fn.lineno,
                      "name": fn.name, "skipped": _skip_marked(fn)},
             "assertions": assertions, "mocks": table.mocks,
-            "unitUnderTest": unit, "overMocked": over_mocked}
+            "unitUnderTest": unit, "overMocked": over_mocked,
+            "productionCalls": production_calls}
 
 
 def cmd_discover(root, _arg=None):

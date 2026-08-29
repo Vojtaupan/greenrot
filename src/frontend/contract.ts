@@ -46,6 +46,11 @@ export interface TestModel {
   readonly mocks: readonly MockModel[];
   readonly unitUnderTest: string | null;
   readonly overMocked: boolean;
+  /**
+   * How many calls in this test reach production code. Check A3 asserts that
+   * production code was never reached, so it must stand down when this is > 0.
+   */
+  readonly productionCalls: number;
 }
 
 export interface FrontendError {

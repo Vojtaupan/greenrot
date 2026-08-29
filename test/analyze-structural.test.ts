@@ -44,7 +44,7 @@ test('a frontend that crashes mid-run cannot produce a clean report', async () =
           line: 2, kind: 'assert', origins: ['literal', 'literal'],
           callOnly: false, broadException: false, swallowed: false, unreachable: false,
         }],
-        mocks: [], unitUnderTest: null, overMocked: false,
+        mocks: [], unitUnderTest: null, overMocked: false, productionCalls: 0,
       },
       { error: true, code: 'frontend-crash', file: 'b.py', line: 1, detail: 'segfault in the analyzer' },
     ],

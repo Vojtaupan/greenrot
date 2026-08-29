@@ -8,7 +8,7 @@ test('a frontend error is distinguishable from a model at runtime', () => {
   };
   const ok: TestModel = {
     test: { id: 'a.py::t', file: 'a.py', line: 2, name: 't', skipped: false },
-    assertions: [], mocks: [], unitUnderTest: null, overMocked: false,
+    assertions: [], mocks: [], unitUnderTest: null, overMocked: false, productionCalls: 0,
   };
   assert.equal(isFrontendError(err), true);
   assert.equal(isFrontendError(ok), false);

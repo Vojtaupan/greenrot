@@ -110,7 +110,22 @@ export function triage(m: TestModel): TriageResult {
     };
   }
 
+  // A3's claim is "production code never reached", so it must stand down the
+  // moment production code was in fact reached. Without this guard the SPY
+  // pattern - a list created empty in the test, filled by production code
+  // through a callback, then asserted on - reads as test-constructed and gets
+  // falsely accused. That pattern produced 3 of 3 false positives on the first
+  // real 449-test suite greenrot was pointed at.
   if (effective.every(isInert)) {
+    if (m.productionCalls > 0) {
+      return {
+        verdict: initialVerdict(),
+        obligations: [probeRequired(
+          m.test.id,
+          'asserts on test-constructed values, but production code also ran - possibly a spy',
+        )],
+      };
+    }
     return {
       verdict: fake(
         ev('A3-test-constructed-only', m, effective[0]!.line,
