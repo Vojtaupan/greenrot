@@ -95,7 +95,7 @@ export function triage(m: TestModel): TriageResult {
         ev('B8-unit-under-test-mocked', m, selfMock.line,
            `the unit under test (${m.unitUnderTest}) is itself replaced by a mock`),
         'the code being tested never runs'),
-      obligations: [probeRequired(m.test.id, 'unit under test is mocked')],
+      obligations: none,
     };
   }
 
@@ -135,6 +135,12 @@ export function triage(m: TestModel): TriageResult {
     };
   }
 
+  // WEAK branches deliberately owe NO probe. WEAK is a statement about what the
+  // test CHECKS, not about whether it can fail, and the probe can answer only
+  // the second question. Letting it refine WEAK was wrong in both directions:
+  // escalating to FAKE accused call-only tests that would fail if the call were
+  // removed (our operators never delete a call), and exonerating to REAL erased
+  // a true quality signal whenever a mutant merely crashed the code path.
   const owed = [probeRequired(m.test.id, 'static triage could not prove it either way')];
 
   if (effective.every(a => a.callOnly)) {
@@ -143,7 +149,7 @@ export function triage(m: TestModel): TriageResult {
         ev('B7-call-only', m, effective[0]!.line,
            'asserts only that a call happened; no value is ever compared'),
         'behaviour is never checked, only invocation'),
-      obligations: owed,
+      obligations: none,
     };
   }
 
@@ -153,7 +159,7 @@ export function triage(m: TestModel): TriageResult {
         ev('B9-over-mocked', m, m.test.line,
            'every collaborator is mocked; little or no real code executes'),
         'the unit is surrounded by fakes'),
-      obligations: owed,
+      obligations: none,
     };
   }
 
@@ -163,7 +169,7 @@ export function triage(m: TestModel): TriageResult {
         ev('B11-broad-exception', m, effective[0]!.line,
            'exception expectation is broad enough to catch an import error'),
         'almost any failure satisfies it'),
-      obligations: owed,
+      obligations: none,
     };
   }
 

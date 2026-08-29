@@ -253,15 +253,24 @@ def _collect_assertions(fn, table, swallowed, unreachable):
 
 
 def _imported_targets(tree):
-    """Module-qualified names this test file imports, e.g. {'add': 'calc.add'}."""
-    out = {}
+    """What this test file imports, split by FORM, because the form decides
+    whether a later patch of the same name can take effect.
+
+    `__from__` : {local_name: 'module.attr'} from `from module import attr`.
+                 These bind the object itself at import time, so patching
+                 'module.attr' afterwards does NOT affect calls made through
+                 the local name.
+    `__mod__`  : {local_name: 'module'} from `import module`. Calls written as
+                 `module.attr(...)` DO see a later patch.
+    """
+    out = {"__from__": {}, "__mod__": {}}
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom) and node.module:
             for alias in node.names:
-                out[alias.asname or alias.name] = node.module + "." + alias.name
+                out["__from__"][alias.asname or alias.name] = node.module + "." + alias.name
         elif isinstance(node, ast.Import):
             for alias in node.names:
-                out[alias.asname or alias.name] = alias.name
+                out["__mod__"][alias.asname or alias.name] = alias.name
     return out
 
 
@@ -287,22 +296,37 @@ def _model_function(fn, rel, imported=None):
     table = _OriginTable()
     _collect_bindings(fn, table)
 
-    # B8: if the test patches something it also imports, the thing under test
-    # has been replaced by a mock and the real code never executes.
+    # B8: the unit under test is itself replaced by a mock.
+    #
+    # The subtle part, and it was backwards in the first version: a patch is
+    # only effective if the call site actually goes through the patched
+    # attribute. When the test does
+    #
+    #     from calc import add        # binds the ORIGINAL function object now
+    #     @patch("calc.add")          # replaces the attribute on the module
+    #     ... add(2, 3)               # ...which this call never consults
+    #
+    # the patch is a no-op and the real code runs. Flagging that as
+    # "unit under test is mocked" is simply wrong. So B8 stands down whenever a
+    # from-import shadows the patch target - the conservative direction, which
+    # costs us some true positives and buys us no false accusations.
     patched = _patch_targets(fn)
     unit = None
-    imported_values = set(imported.values())
+    shadowed_by_from_import = set(imported.get("__from__", {}).values())
     for p in patched:
-        if p in imported_values:
-            unit = p
-            break
+        if p in shadowed_by_from_import:
+            continue
+        unit = p
+        break
+    seen_patches = set()
     for p in patched:
+        if p in seen_patches:
+            continue  # decorator_list and ast.walk both yield the decorator call
+        seen_patches.add(p)
         table.mocks.append({"line": fn.lineno, "target": p, "configuredReturn": True})
     assertions = _collect_assertions(fn, table, _swallowing_try_lines(fn),
                                      _unreachable_lines(fn))
 
-    real_calls = sum(1 for n in ast.walk(fn) if isinstance(n, ast.Call))
-    over_mocked = bool(table.mocks) and real_calls > 0 and len(table.mocks) * 2 >= real_calls
 
     # Does this test call production code at all? Needed by check A3, whose
     # claim is literally "production code never reached".
@@ -318,6 +342,12 @@ def _model_function(fn, rel, imported=None):
         1 for n in ast.walk(fn)
         if isinstance(n, ast.Call) and table.classify(n) == "production-derived"
     )
+
+    # B9 over-mocking means what it says: mocks exist and NO real code runs.
+    # The previous ratio heuristic (mocks * 2 >= total calls) flagged any small
+    # test with one mock and one genuine call, and counted the @patch decorator
+    # itself as a call.
+    over_mocked = bool(table.mocks) and production_calls == 0
 
     return {"test": {"id": rel + "::" + fn.name, "file": rel, "line": fn.lineno,
                      "name": fn.name, "skipped": _skip_marked(fn)},

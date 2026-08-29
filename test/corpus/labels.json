@@ -1,0 +1,21 @@
+{
+  "_comment": "Ground truth. Fix the classifier, never the label. A label edited to make the gate pass is the exact self-deception this tool exists to detect.",
+
+  "python/simple/test_basic.py::test_add_returns_sum": "REAL",
+  "python/simple/test_basic.py::test_is_even": "REAL",
+
+  "python/shapes/test_shapes.py::test_no_assertion": "FAKE",
+  "python/shapes/test_shapes.py::test_tautology": "FAKE",
+  "python/shapes/test_shapes.py::test_only_test_constructed": "FAKE",
+  "python/shapes/test_shapes.py::test_mock_echo": "FAKE",
+  "python/shapes/test_shapes.py::test_call_only": "WEAK",
+  "python/shapes/test_shapes.py::test_broad_exception": "WEAK",
+  "python/shapes/test_shapes.py::test_swallowed": "FAKE",
+  "python/shapes/test_selfmock.py::test_add_is_mocked_away": "REAL",
+
+  "python/tricky/test_looks_fake_but_real.py::test_label_uppercases_the_name_from_the_repo": "REAL",
+  "python/tricky/test_looks_fake_but_real.py::test_label_handles_a_missing_row": "REAL",
+  "python/tricky/test_looks_fake_but_real.py::test_spy_list_is_filled_by_production_code": "REAL",
+  "python/tricky/test_looks_real_but_fake.py::test_service_label_behaviour": "FAKE",
+  "python/tricky/test_looks_real_but_fake.py::test_repo_is_wired": "WEAK"
+}

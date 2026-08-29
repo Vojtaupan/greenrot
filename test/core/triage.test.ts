@@ -55,10 +55,14 @@ test('C12: a permanently skipped test is FAKE, not silently absent', () => {
   assert.equal(r.verdict.evidence[0]!.check, 'C12-permanently-skipped');
 });
 
-test('B7: call-only assertions are WEAK and still owe a probe', () => {
+test('B7: call-only assertions are WEAK and owe NO probe', () => {
   const r = triage(M({ assertions: [A({ callOnly: true })] }));
   assert.equal(r.verdict.name, 'WEAK');
-  assert.equal(r.obligations.length, 1);
+  // WEAK is terminal. The probe answers "can it fail", not "what does it
+  // check", and letting it refine WEAK was wrong in both directions: it
+  // accused call-only tests (our operators never delete a call) and it
+  // exonerated them whenever a mutant merely crashed the code path.
+  assert.equal(r.obligations.length, 0);
 });
 
 test('B9: an over-mocked test is WEAK', () => {
@@ -90,7 +94,7 @@ test('a mix of one inert and one real assertion is NOT fake', () => {
   assert.notEqual(r.verdict.name, 'FAKE');
 });
 
-test('B8: mocking the very thing under test is WEAK and owes a probe', () => {
+test('B8: mocking the very thing under test is WEAK and terminal', () => {
   const r = triage(M({
     unitUnderTest: 'calc.add',
     mocks: [{ line: 5, target: 'calc.add', configuredReturn: true }],
@@ -98,7 +102,7 @@ test('B8: mocking the very thing under test is WEAK and owes a probe', () => {
   }));
   assert.equal(r.verdict.name, 'WEAK');
   assert.equal(r.verdict.evidence[0]!.check, 'B8-unit-under-test-mocked');
-  assert.equal(r.obligations.length, 1);
+  assert.equal(r.obligations.length, 0);
 });
 
 // Regression: 3 of 3 false positives on the first real suite greenrot analysed

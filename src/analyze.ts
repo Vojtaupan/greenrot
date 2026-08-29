@@ -67,15 +67,11 @@ export async function analyze(
   for (const o of base.obligations) {
     const current = base.verdicts.get(o.testId);
     const tc = byId.get(o.testId);
-    if (!current || !tc || isTerminal(current)) continue;
+    // Only UNKNOWN is probeable. FAKE and REAL are proven; WEAK is a structural
+    // conclusion the probe is not equipped to overturn (see triage).
+    if (!current || !tc || isTerminal(current) || current.name !== 'UNKNOWN') continue;
 
     const proven = await probeTest(root, fe, tc, opts);
-
-    // An inconclusive probe must not erase a structural finding. WEAK already
-    // rests on evidence; downgrading it to UNKNOWN would lose information and
-    // is an illegal transition besides.
-    if (proven.name === 'UNKNOWN' && current.name === 'WEAK') continue;
-
     base.verdicts.set(o.testId, discharge(current, proven));
     if (proven.name === 'UNKNOWN' && proven.code) {
       base.unknownReasons.set(proven.code, (base.unknownReasons.get(proven.code) ?? 0) + 1);

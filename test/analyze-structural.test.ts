@@ -18,7 +18,14 @@ test('the shapes corpus yields the expected structural verdicts', async () => {
   assert.equal(name('test_mock_echo'), 'FAKE');
   assert.equal(name('test_swallowed'), 'FAKE');
   assert.equal(name('test_call_only'), 'WEAK');
-  assert.equal(r.verdicts.get('test_selfmock.py::test_add_is_mocked_away')?.name, 'WEAK');
+
+  // NOT B8/WEAK. `from calc import add` binds the original function before
+  // @patch("calc.add") replaces the module attribute, so the patch is a no-op
+  // and the real code runs. B8 stands down when a from-import shadows the
+  // patch target, leaving this UNKNOWN for the probe to settle - and the probe
+  // proves it REAL. Flagging an ineffective patch would be a wrong reason
+  // attached to a real test.
+  assert.equal(r.verdicts.get('test_selfmock.py::test_add_is_mocked_away')?.name, 'UNKNOWN');
 });
 
 test('a repo with real tests is not declared clean before the probe runs', async () => {
