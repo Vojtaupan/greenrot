@@ -73,8 +73,11 @@ export class PythonFrontend implements Frontend {
     return res as Array<TestModel | FrontendError>;
   }
 
-  async cover(_root: string, _test: TestCase): Promise<CoveredLines | FrontendError> {
-    throw new Error('not implemented until Task 4.1');
+  async cover(root: string, test: TestCase): Promise<CoveredLines | FrontendError> {
+    const res = await this.call(root, 'trace', [test.id]);
+    if (isFrontendError(res)) return res;
+    const raw = (res as { byFile: Record<string, number[]> }).byFile;
+    return { byFile: new Map(Object.entries(raw)) };
   }
 
   async mutate(_root: string, _lines: CoveredLines): Promise<Mutant[]> {

@@ -351,7 +351,125 @@ def cmd_model(root, _arg=None):
     return out
 
 
-HANDLERS = {"discover": cmd_discover, "model": cmd_model}
+_TRACE_TOOL_ID = 2  # sys.monitoring "profiler" slot
+
+
+def _trace_with_monitoring(run_callable):
+    mon = sys.monitoring
+    seen = {}
+    mon.use_tool_id(_TRACE_TOOL_ID, "greenrot")
+
+    def on_line(code, line_number):
+        seen.setdefault(code.co_filename, set()).add(line_number)
+        return None
+
+    mon.register_callback(_TRACE_TOOL_ID, mon.events.LINE, on_line)
+    mon.set_events(_TRACE_TOOL_ID, mon.events.LINE)
+    try:
+        run_callable()
+    finally:
+        mon.set_events(_TRACE_TOOL_ID, 0)
+        mon.free_tool_id(_TRACE_TOOL_ID)
+    return seen
+
+
+def _trace_with_settrace(run_callable):
+    seen = {}
+
+    def tracer(frame, event, _arg):
+        if event == "line":
+            seen.setdefault(frame.f_code.co_filename, set()).add(frame.f_lineno)
+        return tracer
+
+    sys.settrace(tracer)
+    try:
+        run_callable()
+    finally:
+        sys.settrace(None)
+    return seen
+
+
+def _run_one_test(root, test_id, extra_args=()):
+    import pytest
+
+    rel_file, _, name = test_id.partition("::")
+    target = os.path.join(root, rel_file) + ("::" + name if name else "")
+    args = ["-q", "-p", "no:cacheprovider", "--no-header", "-x", target]
+    args.extend(extra_args)
+    return int(pytest.main(args))
+
+
+def _production_lines(seen, root):
+    """Keep only lines in files under `root` that are not themselves tests.
+
+    Everything else - stdlib, site-packages, pytest's own frames, the test file
+    - is not a legitimate mutation target.
+    """
+    by_file = {}
+    root_norm = os.path.normcase(os.path.abspath(root))
+    for fn, lines in seen.items():
+        try:
+            abs_fn = os.path.normcase(os.path.abspath(fn))
+        except (OSError, ValueError):
+            continue
+        if not abs_fn.startswith(root_norm):
+            continue
+        rel = _relpath(fn, root)
+        base = os.path.basename(fn)
+        if _is_test_file(base) or "site-packages" in rel or rel.startswith(".."):
+            continue
+        if any(seg in SKIP_DIRS for seg in rel.split("/")):
+            continue
+        by_file[rel] = sorted(lines)
+    return by_file
+
+
+def cmd_trace(root, test_id):
+    """Run ONE test under a line tracer and report the production lines it hit.
+
+    sys.monitoring only exists on 3.12+. Python 3.9-3.11 are still widespread,
+    so the settrace fallback is not optional - without it a large share of real
+    repositories would silently land in UNKNOWN.
+    """
+    try:
+        import pytest  # noqa: F401
+    except ImportError:
+        return {"error": True, "code": "runner-missing", "file": "", "line": 1,
+                "detail": "pytest is not importable by this interpreter"}
+
+    rel_file = test_id.partition("::")[0]
+    tracer = _trace_with_monitoring if hasattr(sys, "monitoring") else _trace_with_settrace
+
+    try:
+        seen = tracer(lambda: _run_one_test(root, test_id))
+    except Exception as exc:  # noqa: BLE001
+        return {"error": True, "code": "frontend-crash", "file": rel_file, "line": 1,
+                "detail": type(exc).__name__ + ": " + str(exc)}
+
+    return {"byFile": _production_lines(seen, root)}
+
+
+def cmd_runtest(root, test_id):
+    try:
+        import pytest  # noqa: F401
+    except ImportError:
+        return {"outcome": "error", "detail": "pytest is not importable"}
+    try:
+        code = _run_one_test(root, test_id)
+    except Exception as exc:  # noqa: BLE001
+        return {"outcome": "error", "detail": type(exc).__name__ + ": " + str(exc)}
+    # pytest exit codes: 0 all passed, 1 tests failed, others are usage/collection
+    # errors. Anything that is not a clean pass or a clean failure is 'error',
+    # which becomes UNKNOWN rather than being misread as a surviving mutant.
+    if code == 0:
+        return {"outcome": "pass", "code": code}
+    if code == 1:
+        return {"outcome": "fail", "code": code}
+    return {"outcome": "error", "code": code, "detail": "pytest exit " + str(code)}
+
+
+HANDLERS = {"discover": cmd_discover, "model": cmd_model,
+            "trace": cmd_trace, "runtest": cmd_runtest}
 
 
 def main():
@@ -365,11 +483,26 @@ def main():
         json.dump({"error": True, "code": "frontend-crash", "file": "", "line": 1,
                    "detail": "unknown command " + cmd}, sys.stdout)
         return 0
+    # stdout is a JSON-only channel. pytest writes its report there, and its
+    # capture plugin works at the file-descriptor level, so redirecting
+    # sys.stdout is not enough - fd 1 itself has to point elsewhere while a
+    # handler runs. Without this the Node side receives "1 passed in 0.06s"
+    # followed by JSON and fails to parse the whole run.
+    sys.stdout.flush()
+    saved_fd = os.dup(1)
+    os.dup2(2, 1)
     try:
-        json.dump(HANDLERS[cmd](root, arg), sys.stdout)
+        result = HANDLERS[cmd](root, arg)
     except Exception as exc:  # noqa: BLE001 - a crash must become data, not a traceback
-        json.dump({"error": True, "code": "frontend-crash", "file": "", "line": 1,
-                   "detail": type(exc).__name__ + ": " + str(exc)}, sys.stdout)
+        result = {"error": True, "code": "frontend-crash", "file": "", "line": 1,
+                  "detail": type(exc).__name__ + ": " + str(exc)}
+    finally:
+        sys.stdout.flush()  # flush the handler's noise into the redirected fd
+        os.dup2(saved_fd, 1)
+        os.close(saved_fd)
+
+    json.dump(result, sys.stdout)
+    sys.stdout.flush()
     return 0
 
 
