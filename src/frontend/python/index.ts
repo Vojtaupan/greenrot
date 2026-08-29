@@ -64,8 +64,13 @@ export class PythonFrontend implements Frontend {
     );
   }
 
-  async model(_root: string, _tests: readonly TestCase[]): Promise<Array<TestModel | FrontendError>> {
-    throw new Error('not implemented until Task 3.3');
+  async model(
+    root: string,
+    _tests: readonly TestCase[],
+  ): Promise<Array<TestModel | FrontendError>> {
+    const res = await this.call(root, 'model');
+    if (isFrontendError(res)) return [res];
+    return res as Array<TestModel | FrontendError>;
   }
 
   async cover(_root: string, _test: TestCase): Promise<CoveredLines | FrontendError> {
