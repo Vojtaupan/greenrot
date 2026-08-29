@@ -89,3 +89,14 @@ test('a mix of one inert and one real assertion is NOT fake', () => {
   const r = triage(M({ assertions: [A({ origins: ['literal', 'literal'] }), A()] }));
   assert.notEqual(r.verdict.name, 'FAKE');
 });
+
+test('B8: mocking the very thing under test is WEAK and owes a probe', () => {
+  const r = triage(M({
+    unitUnderTest: 'calc.add',
+    mocks: [{ line: 5, target: 'calc.add', configuredReturn: true }],
+    assertions: [A({ origins: ['mock-configured', 'literal'] })],
+  }));
+  assert.equal(r.verdict.name, 'WEAK');
+  assert.equal(r.verdict.evidence[0]!.check, 'B8-unit-under-test-mocked');
+  assert.equal(r.obligations.length, 1);
+});

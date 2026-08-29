@@ -252,9 +252,52 @@ def _collect_assertions(fn, table, swallowed, unreachable):
     return assertions
 
 
-def _model_function(fn, rel):
+def _imported_targets(tree):
+    """Module-qualified names this test file imports, e.g. {'add': 'calc.add'}."""
+    out = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module:
+            for alias in node.names:
+                out[alias.asname or alias.name] = node.module + "." + alias.name
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                out[alias.asname or alias.name] = alias.name
+    return out
+
+
+def _patch_targets(fn):
+    """Dotted strings passed to @patch(...) or patch(...) inside the test."""
+    targets = []
+    candidates = list(fn.decorator_list) + [n for n in ast.walk(fn)
+                                            if isinstance(n, ast.Call)]
+    for node in candidates:
+        if not isinstance(node, ast.Call):
+            continue
+        name = _unparse(node.func)
+        if not name.split(".")[-1].startswith("patch"):
+            continue
+        for a in node.args:
+            if isinstance(a, ast.Constant) and isinstance(a.value, str):
+                targets.append(a.value)
+    return targets
+
+
+def _model_function(fn, rel, imported=None):
+    imported = imported or {}
     table = _OriginTable()
     _collect_bindings(fn, table)
+
+    # B8: if the test patches something it also imports, the thing under test
+    # has been replaced by a mock and the real code never executes.
+    patched = _patch_targets(fn)
+    unit = None
+    imported_values = set(imported.values())
+    for p in patched:
+        if p in imported_values:
+            unit = p
+            break
+    for p in patched:
+        table.mocks.append({"line": fn.lineno, "target": p, "configuredReturn": True})
     assertions = _collect_assertions(fn, table, _swallowing_try_lines(fn),
                                      _unreachable_lines(fn))
 
@@ -264,7 +307,7 @@ def _model_function(fn, rel):
     return {"test": {"id": rel + "::" + fn.name, "file": rel, "line": fn.lineno,
                      "name": fn.name, "skipped": _skip_marked(fn)},
             "assertions": assertions, "mocks": table.mocks,
-            "unitUnderTest": None, "overMocked": over_mocked}
+            "unitUnderTest": unit, "overMocked": over_mocked}
 
 
 def cmd_discover(root, _arg=None):
@@ -300,7 +343,7 @@ def cmd_model(root, _arg=None):
             if not _is_test_func(node):
                 continue
             try:
-                out.append(_model_function(node, rel))
+                out.append(_model_function(node, rel, _imported_targets(tree)))
             except Exception as exc:  # noqa: BLE001
                 out.append({"error": True, "code": "frontend-crash", "file": rel,
                             "line": node.lineno,

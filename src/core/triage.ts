@@ -82,6 +82,23 @@ export function triage(m: TestModel): TriageResult {
     };
   }
 
+  // Before A4 on purpose: patching the unit under test is a different and more
+  // informative finding than echoing a mock, and A4 would otherwise swallow it.
+  // It is WEAK rather than FAKE because the test may still assert something
+  // real about the surrounding wiring - the probe decides.
+  const selfMock = m.unitUnderTest
+    ? m.mocks.find(mk => mk.target === m.unitUnderTest)
+    : undefined;
+  if (selfMock) {
+    return {
+      verdict: weak(
+        ev('B8-unit-under-test-mocked', m, selfMock.line,
+           `the unit under test (${m.unitUnderTest}) is itself replaced by a mock`),
+        'the code being tested never runs'),
+      obligations: [probeRequired(m.test.id, 'unit under test is mocked')],
+    };
+  }
+
   if (effective.every(a => a.origins.includes('mock-configured'))
       && !effective.some(a => a.origins.includes('production-derived'))) {
     return {
