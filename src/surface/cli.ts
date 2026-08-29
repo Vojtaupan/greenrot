@@ -15,6 +15,8 @@ export interface CliOptions {
   format: 'human' | 'json' | 'sarif';
   strictUnknown: boolean;
   maxMutants: number;
+  /** Repo-relative prefixes to skip - a fixtures directory, usually. */
+  exclude: string[];
   /**
    * Skip the probe entirely: structural checks only, nothing executed.
    * Seconds instead of minutes, and safe precisely because everything the
@@ -31,6 +33,7 @@ const USAGE = `greenrot ${VERSION} - which of your tests cannot fail?
   --json                           machine-readable report
   --sarif                          SARIF 2.1.0 for GitHub code scanning
   --static                         structural checks only, nothing executed (fast)
+  --exclude <a,b>                  skip these repo-relative path prefixes
   --max-mutants <n>                mutants tried per test (default 12)
   --no-strict-unknown              exit 0 even when some tests could not be checked
   --version                        print version
@@ -45,6 +48,7 @@ exit codes
 export function parseArgs(args: readonly string[]): CliOptions {
   const o: CliOptions = {
     root: '.', format: 'human', strictUnknown: true, maxMutants: 12, staticOnly: false,
+    exclude: [],
   };
   const rest = [...args];
   while (rest.length > 0) {
@@ -53,6 +57,7 @@ export function parseArgs(args: readonly string[]): CliOptions {
     else if (a === '--sarif') o.format = 'sarif';
     else if (a === '--no-strict-unknown') o.strictUnknown = false;
     else if (a === '--static') o.staticOnly = true;
+    else if (a === '--exclude') o.exclude.push(...(rest.shift() ?? '').split(',').filter(Boolean));
     else if (a === '--max-mutants') o.maxMutants = Number(rest.shift() ?? 12);
     else if (!a.startsWith('-')) o.root = a;
   }
@@ -63,16 +68,21 @@ export async function runCli(
   o: CliOptions,
   write: (s: string) => void,
 ): Promise<0 | 1 | 2> {
-  const fe = new PythonFrontend();
+  const fe = new PythonFrontend(o.exclude);
   const r = o.staticOnly
     ? await analyzeStructural(o.root, fe)
     : await analyze(o.root, fe, { maxMutants: o.maxMutants });
 
-  if (o.format === 'json') write(renderJson(r.verdicts, r.unknownReasons));
-  else if (o.format === 'sarif') write(renderSarif(r.verdicts));
-  else write(renderHuman(r.verdicts, r.unknownReasons, { color: stdout.isTTY === true }));
+  if (o.format === 'json') write(renderJson(r.verdicts, r.unknownReasons, r.ciFindings));
+  else if (o.format === 'sarif') write(renderSarif(r.verdicts, r.ciFindings));
+  else write(renderHuman(r.verdicts, r.unknownReasons, { color: stdout.isTTY === true }, r.ciFindings));
 
-  return exitCode(tally([...r.verdicts.values()]), { strictUnknown: o.strictUnknown });
+  const code = exitCode(tally([...r.verdicts.values()]), { strictUnknown: o.strictUnknown });
+  // A gate that cannot go red is a proven defect with a path:line, so it fails
+  // the run like a fake test does. Reporting it without failing would make it
+  // exactly the kind of finding everyone scrolls past.
+  if (code === 0 && r.ciFindings.length > 0) return 1;
+  return code;
 }
 
 async function main(): Promise<void> {

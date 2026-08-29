@@ -23,6 +23,37 @@ jobs:
       - run: npm run typecheck
       - run: npm test
 
+  # The publish gate. A single false FAKE on the labelled corpus blocks release,
+  # because FAKE is an accusation. This job exists to go red.
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24 }
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - run: python -m pip install --upgrade pip pytest
+      - run: npm install
+      - run: npm run build
+      - name: false-positive gate
+        run: npm run gate
+
+  # greenrot audits itself. The corpus is excluded because those fixtures are
+  # deliberately fake; --no-strict-unknown because this repo's own tests are
+  # TypeScript, which the Python frontend cannot see until the JS frontend
+  # lands. What this job actually enforces today is check 13 on our own CI.
+  selfaudit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24 }
+      - run: npm install
+      - run: npm run build
+      - name: greenrot audits greenrot
+        run: node dist/surface/cli.js . --static --exclude test/corpus --no-strict-unknown
+
   # Proves the shipped artifact runs on the oldest supported Node.
   smoke:
     runs-on: ubuntu-latest

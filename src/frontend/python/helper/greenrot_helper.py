@@ -41,12 +41,17 @@ def _is_test_file(name):
     return (name.startswith("test_") and name.endswith(".py")) or name.endswith("_test.py")
 
 
-def _iter_test_files(root):
+def _iter_test_files(root, excludes=()):
     for dirpath, dirnames, filenames in os.walk(root):
         dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]
         for fn in sorted(filenames):
-            if _is_test_file(fn):
-                yield os.path.join(dirpath, fn)
+            if not _is_test_file(fn):
+                continue
+            path = os.path.join(dirpath, fn)
+            rel = _relpath(path, root)
+            if any(rel == e or rel.startswith(e.rstrip("/") + "/") for e in excludes):
+                continue
+            yield path
 
 
 def _is_test_func(node):
@@ -356,9 +361,16 @@ def _model_function(fn, rel, imported=None):
             "productionCalls": production_calls}
 
 
-def cmd_discover(root, _arg=None):
+def _parse_excludes(arg):
+    """Comma-separated repo-relative path prefixes to skip."""
+    if not arg:
+        return ()
+    return tuple(x.strip().replace(os.sep, "/") for x in arg.split(",") if x.strip())
+
+
+def cmd_discover(root, arg=None):
     out = []
-    for path in _iter_test_files(root):
+    for path in _iter_test_files(root, _parse_excludes(arg)):
         rel = _relpath(path, root)
         try:
             with open(path, "r", encoding="utf-8") as fh:
@@ -374,9 +386,9 @@ def cmd_discover(root, _arg=None):
     return out
 
 
-def cmd_model(root, _arg=None):
+def cmd_model(root, arg=None):
     out = []
-    for path in _iter_test_files(root):
+    for path in _iter_test_files(root, _parse_excludes(arg)):
         rel = _relpath(path, root)
         try:
             with open(path, "r", encoding="utf-8") as fh:

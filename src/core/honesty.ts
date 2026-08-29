@@ -39,8 +39,21 @@ export function tally(verdicts: readonly Verdict[]): Tally {
  */
 export function headline(t: Tally, reasons: ReadonlyMap<UnknownReason, number>): Headline {
   const vouchedFor = t.total - t.unknown;
-  const canClaimClean = t.fake === 0 && t.unknown === 0;
+  // An empty run is NOT clean. "I analysed nothing, therefore nothing is
+  // wrong" is a vacuous truth and exactly the false all-clear this tool
+  // exists to refuse - and it is what a misconfigured path or an over-broad
+  // --exclude actually looks like from the outside.
+  const canClaimClean = t.total > 0 && t.fake === 0 && t.unknown === 0;
   const weakNote = t.weak > 0 ? `, ${t.weak} weak` : '';
+
+  if (t.total === 0) {
+    return {
+      canClaimClean: false,
+      vouchedFor: 0,
+      notVouchedFor: 0,
+      text: 'no tests were analysed - nothing here can be vouched for',
+    };
+  }
 
   if (canClaimClean) {
     return {
@@ -75,6 +88,11 @@ export function headline(t: Tally, reasons: ReadonlyMap<UnknownReason, number>):
 /** 1 outranks 2: a proven accusation is more actionable than admitted ignorance. */
 export function exitCode(t: Tally, opts: { strictUnknown: boolean }): 0 | 1 | 2 {
   if (t.fake > 0) return 1;
+  // An empty run exits 2, not 0. Reporting success for a run that analysed
+  // nothing is how a mistyped path or an over-broad --exclude turns into a
+  // green CI badge - and the headline already refuses to call it clean, so a
+  // 0 here would have the exit code contradicting the report.
+  if (t.total === 0 && opts.strictUnknown) return 2;
   if (t.unknown > 0 && opts.strictUnknown) return 2;
   return 0;
 }

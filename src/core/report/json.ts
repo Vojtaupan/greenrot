@@ -1,3 +1,4 @@
+import type { Evidence } from '../evidence.ts';
 import { headline, tally } from '../honesty.ts';
 import type { UnknownReason, Verdict } from '../verdict.ts';
 
@@ -8,6 +9,7 @@ import type { UnknownReason, Verdict } from '../verdict.ts';
 export function renderJson(
   verdicts: ReadonlyMap<string, Verdict>,
   reasons: ReadonlyMap<UnknownReason, number>,
+  ciFindings: readonly Evidence[] = [],
 ): string {
   const t = tally([...verdicts.values()]);
   const h = headline(t, reasons);
@@ -19,6 +21,7 @@ export function renderJson(
     notVouchedFor: h.notVouchedFor,
     tally: t,
     unknownReasons: Object.fromEntries(reasons),
+    ciFindings,
     tests: [...verdicts].map(([id, v]) => ({
       id,
       verdict: v.name,

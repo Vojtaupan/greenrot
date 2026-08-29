@@ -1,4 +1,8 @@
+import { readdir, readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { isFrontendError, type Frontend, type TestCase } from './frontend/contract.ts';
+import { auditWorkflow } from './core/ci-gate.ts';
+import type { Evidence } from './core/evidence.ts';
 import type { Obligation } from './core/obligation.ts';
 import { probeTest, type ProbeOptions } from './core/probe.ts';
 import { triage } from './core/triage.ts';
@@ -8,6 +12,52 @@ export interface StructuralResult {
   verdicts: Map<string, Verdict>;
   obligations: Obligation[];
   unknownReasons: Map<UnknownReason, number>;
+  /**
+   * Check 13 findings: CI steps that cannot produce a nonzero exit. Kept
+   * separate from `verdicts` because a workflow step is not a test, and
+   * folding it into the test tally would muddy the headline.
+   */
+  ciFindings: Evidence[];
+}
+
+const CI_GLOBS = ['.github/workflows', 'scripts', '.gitlab-ci.yml', 'Makefile'];
+
+/** Scan workflow and script files for gates that cannot go red. */
+async function auditCiFiles(root: string): Promise<Evidence[]> {
+  const found: Evidence[] = [];
+  const seen = new Set<string>();
+
+  const walk = async (dir: string, rel: string, depth: number): Promise<void> => {
+    if (depth > 4) return;
+    let entries;
+    try {
+      entries = await readdir(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of entries) {
+      if (e.name.startsWith('.') && e.name !== '.github' && e.name !== '.gitlab-ci.yml') continue;
+      if (e.name === 'node_modules' || e.name === '.venv') continue;
+      const abs = join(dir, e.name);
+      const relPath = rel ? `${rel}/${e.name}` : e.name;
+      if (e.isDirectory()) {
+        await walk(abs, relPath, depth + 1);
+        continue;
+      }
+      if (!/\.(ya?ml|sh|ps1)$|^Makefile$/.test(e.name)) continue;
+      if (!CI_GLOBS.some(g => relPath.startsWith(g) || relPath === g)) continue;
+      if (seen.has(relPath)) continue;
+      seen.add(relPath);
+      try {
+        found.push(...auditWorkflow(relPath, await readFile(abs, 'utf8')));
+      } catch {
+        // Unreadable file: not a finding, and never a claim of cleanliness.
+      }
+    }
+  };
+
+  await walk(root, '', 0);
+  return found;
 }
 
 /**
@@ -20,6 +70,8 @@ export async function analyzeStructural(root: string, fe: Frontend): Promise<Str
   const obligations: Obligation[] = [];
   const unknownReasons = new Map<UnknownReason, number>();
 
+  const ciFindings = await auditCiFiles(root);
+
   const bump = (c: UnknownReason) => unknownReasons.set(c, (unknownReasons.get(c) ?? 0) + 1);
 
   const discovered = await fe.discover(root);
@@ -28,7 +80,7 @@ export async function analyzeStructural(root: string, fe: Frontend): Promise<Str
     verdicts.set('<discovery>', {
       name: 'UNKNOWN', code: discovered.code, reason: discovered.detail, evidence: [],
     });
-    return { verdicts, obligations, unknownReasons };
+    return { verdicts, obligations, unknownReasons, ciFindings };
   }
 
   const models = await fe.model(root, discovered);
@@ -46,7 +98,7 @@ export async function analyzeStructural(root: string, fe: Frontend): Promise<Str
     if (verdict.name === 'UNKNOWN' && verdict.code) bump(verdict.code);
   }
 
-  return { verdicts, obligations, unknownReasons };
+  return { verdicts, obligations, unknownReasons, ciFindings };
 }
 
 /**

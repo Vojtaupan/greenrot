@@ -59,3 +59,17 @@ test('tally counts every verdict exactly once', () => {
   const t = tally([v('FAKE'), v('WEAK'), v('REAL'), v('UNKNOWN', 'no-mutants')]);
   assert.deepEqual(t, { fake: 1, weak: 1, real: 1, unknown: 1, total: 4 });
 });
+
+test('an EMPTY run is never clean - analysing nothing proves nothing', () => {
+  const t = tally([]);
+  const h = headline(t, new Map());
+  assert.equal(h.canClaimClean, false);
+  assert.match(h.text, /no tests were analysed/i);
+  assert.doesNotMatch(h.text, /no fake tests/i);
+});
+
+test('an empty run exits 2 under strict mode, never 0', () => {
+  const t = tally([]);
+  assert.equal(exitCode(t, { strictUnknown: true }), 2);
+  assert.equal(exitCode(t, { strictUnknown: false }), 0);
+});

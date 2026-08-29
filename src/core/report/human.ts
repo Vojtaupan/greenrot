@@ -1,4 +1,4 @@
-import { formatLocation } from '../evidence.ts';
+import { formatLocation, type Evidence } from '../evidence.ts';
 import { headline, tally } from '../honesty.ts';
 import type { UnknownReason, Verdict } from '../verdict.ts';
 
@@ -18,6 +18,7 @@ export function renderHuman(
   verdicts: ReadonlyMap<string, Verdict>,
   reasons: ReadonlyMap<UnknownReason, number>,
   opts: HumanOptions,
+  ciFindings: readonly Evidence[] = [],
 ): string {
   const lines: string[] = [];
   const t = tally([...verdicts.values()]);
@@ -34,6 +35,17 @@ export function renderHuman(
     const check = first?.check ?? v.code ?? '';
     lines.push(`${tag}  ${loc}  ${check}`);
     lines.push(`      ${first?.detail ?? v.reason}`);
+  }
+
+  // Check 13 gets its own section: a workflow step is not a test, and the
+  // tally above is about tests.
+  if (ciFindings.length > 0) {
+    if (lines.length > 0) lines.push('');
+    lines.push(paint(opts.color, '31', 'gates that cannot go red:'));
+    for (const e of ciFindings) {
+      lines.push(`GATE  ${formatLocation(e)}  ${e.check}`);
+      lines.push(`      ${e.detail}`);
+    }
   }
 
   if (lines.length > 0) lines.push('');

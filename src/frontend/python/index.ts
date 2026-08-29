@@ -28,6 +28,17 @@ const crash = (detail: string): FrontendError =>
 export class PythonFrontend implements Frontend {
   readonly language = 'python' as const;
 
+  /** Repo-relative path prefixes to skip, e.g. a directory of test fixtures. */
+  readonly excludes: readonly string[];
+
+  // An explicit field, NOT a constructor parameter property. Node's type
+  // stripping rejects parameter properties outright, and `tsc --noEmit` does
+  // not catch it - typechecking and type-stripping have different capabilities,
+  // so the build was green while every test file failed to load.
+  constructor(excludes: readonly string[] = []) {
+    this.excludes = excludes;
+  }
+
   protected async call(
     root: string,
     cmd: string,
@@ -59,7 +70,7 @@ export class PythonFrontend implements Frontend {
   }
 
   async discover(root: string): Promise<TestCase[] | FrontendError> {
-    const res = await this.call(root, 'discover');
+    const res = await this.call(root, 'discover', [this.excludes.join(',')]);
     if (isFrontendError(res)) return res;
     // The helper may interleave per-file parse errors with test cases; keep the
     // cases here and let `model` surface the errors, so discovery never throws
@@ -73,7 +84,7 @@ export class PythonFrontend implements Frontend {
     root: string,
     _tests: readonly TestCase[],
   ): Promise<Array<TestModel | FrontendError>> {
-    const res = await this.call(root, 'model');
+    const res = await this.call(root, 'model', [this.excludes.join(',')]);
     if (isFrontendError(res)) return [res];
     return res as Array<TestModel | FrontendError>;
   }
