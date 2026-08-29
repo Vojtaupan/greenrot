@@ -7,7 +7,7 @@
   "engines": { "node": ">=20" },
   "files": ["dist", "README.md", "PRIOR-ART.md", "LICENSE"],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node scripts/copy-assets.mjs",
     "test": "node --test \"test/**/*.test.ts\"",
     "typecheck": "tsc --noEmit",
     "gate": "node scripts/fp-gate.mjs"
