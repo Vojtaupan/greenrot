@@ -4,3 +4,4 @@ dist/
 .greenrot-scratch/
 dogfood.json
 scripts/scrub-patterns.local
+.venv/

@@ -1,0 +1,21 @@
+{
+  "name": "greenrot",
+  "version": "0.1.0",
+  "description": "Which of your tests cannot fail? Proves it, or says it could not.",
+  "type": "module",
+  "bin": { "greenrot": "./dist/surface/cli.js" },
+  "engines": { "node": ">=20" },
+  "files": ["dist", "README.md", "PRIOR-ART.md", "LICENSE"],
+  "scripts": {
+    "build": "tsc",
+    "test": "node --test \"test/**/*.test.ts\"",
+    "typecheck": "tsc --noEmit",
+    "gate": "node scripts/fp-gate.mjs"
+  },
+  "keywords": ["testing", "test-quality", "vacuous-tests", "mutation", "pytest", "ci"],
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "@types/node": "^22.0.0"
+  }
+}
