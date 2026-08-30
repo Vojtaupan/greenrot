@@ -35,3 +35,35 @@ test('a shapes run exits 1 because proven fakes are present', async () => {
   assert.ok(parsed.tally.fake > 0);
   assert.equal(parsed.canClaimClean, false);
 });
+
+const JS_SHAPES = fileURLToPath(new URL('./corpus/js/shapes/', import.meta.url));
+
+test('a JS-only directory is analysed without needing a python interpreter', async () => {
+  let out = '';
+  const code = await runCli(
+    {
+      root: JS_SHAPES, format: 'json', strictUnknown: true, maxMutants: 1,
+      staticOnly: true, exclude: [],
+    },
+    s => { out += s; },
+  );
+  const parsed = JSON.parse(out);
+  assert.ok(parsed.tally.total > 0, 'JS tests must be discovered');
+  assert.equal(code, 1, 'the shapes corpus contains proven fakes');
+});
+
+test('both frontends run, so a polyglot root is audited in one pass', async () => {
+  let out = '';
+  const corpus = fileURLToPath(new URL('./corpus/', import.meta.url));
+  await runCli(
+    {
+      root: corpus, format: 'json', strictUnknown: true, maxMutants: 1,
+      staticOnly: true, exclude: [],
+    },
+    s => { out += s; },
+  );
+  const parsed = JSON.parse(out);
+  const ids: string[] = parsed.tests.map((t: { id: string }) => t.id);
+  assert.ok(ids.some(i => i.endsWith('.py::test_no_assertion')), 'python tests found');
+  assert.ok(ids.some(i => i.includes('.test.js::no assertion')), 'js tests found');
+});

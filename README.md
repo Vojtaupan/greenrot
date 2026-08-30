@@ -91,8 +91,8 @@ Measured against a hand-labelled corpus of tricky cases — real tests that look
 fake, fake tests that look real:
 
 ```
-corpus       : 15 labelled, 15 compared
-agreements   : 15
+corpus       : 31 labelled, 31 compared
+agreements   : 31
 false FAKE   : 0
 false-positive rate: 0.00%
 ```
@@ -123,6 +123,9 @@ npx greenrot [path]
 
 ## The checks
 
+greenrot audits **its own suite** in CI, which is the JS frontend's main
+dogfood: 140 tests, zero structural fakes.
+
 **Structurally fake** — A1 no assertion · A2 tautology · A3 asserts only
 test-constructed values · A4 asserts a mock's own configured return · A5
 unreachable assertion · A6 assertion swallowed by a bare `except`
@@ -143,14 +146,23 @@ disease as a fake test, one level up.
 - **Node >= 20.** Python analysis uses the *target repository's own* interpreter
   and a stdlib-only helper — nothing to `pip install`. Override with
   `$GREENROT_PYTHON`.
-- **Python + pytest today.** JavaScript/TypeScript is next; the frontend
-  contract is five methods, so a new language is a contribution-sized change.
+- **Python + pytest, and JavaScript/TypeScript via `node:test`.** Both frontends
+  run on every invocation, so a polyglot repo is audited in one pass. **vitest
+  and jest are not supported yet** — their transforms move code before it runs,
+  which needs source-map handling the `node:test` path does not.
+- **TypeScript analysis needs Node >= 23.10.** Types are stripped with
+  `module.stripTypeScriptTypes`, which replaces them with whitespace and so
+  preserves every line and column — that is what lets a finding cite the
+  original `.ts` with no source map at all. On older Node a `.ts` file is a
+  reported `UNKNOWN`, never a guess.
 - **The probe does not scale yet.** On a 449-test suite the static pass is
   ~1.6s; a full probe run is minutes to tens of minutes. Use `--static` in a
   pre-commit hook and the full run in CI. Concurrency is not implemented.
 - **Read-only.** Mutants are applied to a scratch copy, never to your working
   tree, never edit-then-revert. Zero network, zero LLM calls, deterministic.
-- **Zero runtime dependencies** in the core and the Python frontend.
+- **Zero runtime dependencies** in the core and the Python frontend. The JS
+  frontend adds exactly two, both pure JavaScript: `acorn` and `acorn-walk`.
+  No native binaries anywhere.
 
 ## Prior art
 
