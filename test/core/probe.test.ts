@@ -24,11 +24,29 @@ function fakeFrontend(mutants: Mutant[], outcomes: RunOutcome[]): Frontend & { c
   return fe;
 }
 
-test('every mutant surviving is FAKE - total insensitivity', async () => {
+// The probe can prove a test honest (REAL) but it CANNOT prove one vacuous.
+// Our operator set is four families, one mutant per family per line - a narrow
+// sample of possible defects - so "detected none of them" is evidence of
+// weakness, not proof that the test cannot fail. greenrot's own suite made
+// this concrete: a scoped self-audit returned 23 empirical FAKEs, every one of
+// which was an honest test that simply ignored the edits we happened to try.
+test('detecting no mutant is WEAK, never FAKE', async () => {
   const v = await probeTest('/r', fakeFrontend([M(1), M(2), M(3)], ['pass', 'pass', 'pass']), T, {});
-  assert.equal(v.name, 'FAKE');
+  assert.equal(v.name, 'WEAK');
   assert.equal(v.evidence[0]!.kind, 'empirical');
   assert.equal(v.evidence[0]!.check, 'E-probe-total-insensitivity');
+});
+
+test('a truncated probe says so, so the evidence is not overstated', async () => {
+  const v = await probeTest('/r', fakeFrontend([M(1), M(2), M(3)], ['pass', 'pass', 'pass']), T,
+                            { maxMutants: 2 });
+  assert.equal(v.name, 'WEAK');
+  assert.match(v.evidence[0]!.detail, /2 mutations tried \(of 3 available\)/);
+});
+
+test('only STRUCTURAL evidence can produce FAKE - the probe never does', async () => {
+  const v = await probeTest('/r', fakeFrontend([M(1)], ['pass']), T, {});
+  assert.notEqual(v.name, 'FAKE');
 });
 
 test('ONE detected mutant makes it REAL, not FAKE - the false-positive guard', async () => {
@@ -65,8 +83,8 @@ test('a cover failure is UNKNOWN with the frontend reason preserved', async () =
   assert.match(v.reason, /no pytest/);
 });
 
-test('maxMutants caps the work but a capped survival still needs ALL of them dead', async () => {
+test('maxMutants caps the work; undetected within the cap is WEAK', async () => {
   const v = await probeTest('/r', fakeFrontend([M(1), M(2), M(3)], ['pass', 'pass', 'fail']), T,
                             { maxMutants: 2 });
-  assert.equal(v.name, 'FAKE', 'within the cap, every mutant survived');
+  assert.equal(v.name, 'WEAK', 'nothing was detected within the cap');
 });

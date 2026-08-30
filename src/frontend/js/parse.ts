@@ -48,6 +48,27 @@ export const TS_UNSUPPORTED =
  * The cost is honest and stated: on Node < 23.10 there is no stripper, and a
  * .ts file becomes a reported UNKNOWN rather than a guess.
  */
+let warningsMuted = false;
+
+/**
+ * Node emits an ExperimentalWarning every time stripTypeScriptTypes is called.
+ * greenrot calls it once per TypeScript file, so an ordinary run buries its own
+ * report under dozens of identical warnings and looks broken. Only that one
+ * warning is dropped; everything else still reaches the user.
+ */
+function muteStripWarning(): void {
+  if (warningsMuted) return;
+  warningsMuted = true;
+  const original = process.emitWarning.bind(process);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (process as any).emitWarning = (warning: unknown, ...rest: unknown[]): void => {
+    const text = typeof warning === 'string' ? warning : String((warning as Error)?.message ?? '');
+    if (text.includes('stripTypeScriptTypes')) return;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (original as any)(warning, ...rest);
+  };
+}
+
 export async function loadParser(_root: string): Promise<Parser | null> {
   let acorn: { parse: (s: string, o: unknown) => EsNode };
   try {
@@ -60,6 +81,7 @@ export async function loadParser(_root: string): Promise<Parser | null> {
     stripTypeScriptTypes?: (s: string) => string;
   };
   const strip = mod.stripTypeScriptTypes;
+  if (strip) muteStripWarning();
 
   return {
     kind: strip ? 'strip+acorn' : 'acorn',

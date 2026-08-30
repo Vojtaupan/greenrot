@@ -39,8 +39,8 @@ those apart — it reports that a line executed, never that anything was checked
 
 | Verdict | Meaning | How it is established |
 |---|---|---|
-| **FAKE** | Proven it cannot fail | *Structurally* — no assertion that can ever be false. Or *empirically* — every mutation of the code it runs went undetected. |
-| **WEAK** | Can fail, but never for a behavioural reason | Asserts only that a call happened; the unit under test is itself mocked; nothing real executes. |
+| **FAKE** | Proven it cannot fail | **Structural proof only** — no assertion in the test can ever be false. |
+| **WEAK** | Can fail, but barely | Asserts only that a call happened; the unit under test is itself mocked; nothing real executes; **or it detected none of the mutations we tried**. |
 | **REAL** | Proven honest | We broke the code it covers and it went red. |
 | **UNKNOWN** | We could not vouch for it | Parse failure, missing runner, probe timeout, frontend crash — always with a reason code. |
 
@@ -82,10 +82,19 @@ Classic mutation testing costs `mutants × the whole suite`. This costs
 
 **FAKE is an accusation, so it requires proof**, never suspicion:
 
-- *Structural* FAKE means no assertion in the test can vary.
-- *Empirical* FAKE means **total insensitivity** — every mutant in the lines
-  that test executes survived. Detect **one** and the verdict is `REAL`.
-  Generate none and it is `UNKNOWN`, because absence of a probe is not evidence.
+- **Only structural proof produces FAKE** — the test contains no assertion that
+  can vary. The probe never does.
+- **The probe can prove a test honest, not vacuous.** Detect one mutation and
+  the verdict is `REAL`. Detect none and it is `WEAK`, not an accusation:
+  greenrot's operator set is four families, a narrow sample of possible defects,
+  so "ignored the edits we tried" is evidence of weakness, not proof that a test
+  cannot fail. Generate no mutants at all and it is `UNKNOWN`, because absence
+  of a probe is not evidence.
+
+This is narrower than it could be, on purpose. It was narrowed *because* of the
+self-audit: an earlier version called total insensitivity FAKE, and pointing it
+at greenrot's own suite produced 23 accusations that inspection showed were all
+honest tests.
 
 Measured against a hand-labelled corpus of tricky cases — real tests that look
 fake, fake tests that look real:
@@ -123,8 +132,9 @@ npx greenrot [path]
 
 ## The checks
 
-greenrot audits **its own suite** in CI, which is the JS frontend's main
-dogfood: 140 tests, zero structural fakes.
+greenrot audits **its own suite**, which is the JS frontend's main dogfood.
+Full probe over its pure unit tests: **73 tests, 0 fake, 46 proven real, 24
+weak, 3 unknown** — in 78 seconds.
 
 **Structurally fake** — A1 no assertion · A2 tautology · A3 asserts only
 test-constructed values · A4 asserts a mock's own configured return · A5

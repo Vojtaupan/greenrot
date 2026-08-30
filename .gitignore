@@ -5,3 +5,6 @@ dist/
 dogfood.json
 scripts/scrub-patterns.local
 .venv/
+selfaudit*.json
+selfaudit*.err
+selfaudit-time.txt
