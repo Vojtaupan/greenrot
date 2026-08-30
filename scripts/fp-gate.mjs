@@ -13,16 +13,25 @@ const ROOTS = ['simple', 'shapes', 'tricky'];
 
 const { analyze } = await import('../dist/analyze.js');
 const { PythonFrontend } = await import('../dist/frontend/python/index.js');
+const { JsFrontend } = await import('../dist/frontend/js/index.js');
 
 const labels = JSON.parse(
   readFileSync(new URL('../test/corpus/labels.json', import.meta.url), 'utf8'),
 );
 
 const actual = {};
+
+// Each language is scored against its OWN corpus with only its own frontend, so
+// a regression in one cannot be masked by the other.
 for (const name of ROOTS) {
   const root = fileURLToPath(new URL(`../test/corpus/python/${name}/`, import.meta.url));
-  const r = await analyze(root, new PythonFrontend(), { maxMutants: 6 });
+  const r = await analyze(root, [new PythonFrontend()], { maxMutants: 6 });
   for (const [id, v] of r.verdicts) actual[`python/${name}/${id}`] = v.name;
+}
+for (const name of ROOTS) {
+  const root = fileURLToPath(new URL(`../test/corpus/js/${name}/`, import.meta.url));
+  const r = await analyze(root, [new JsFrontend()], { maxMutants: 6 });
+  for (const [id, v] of r.verdicts) actual[`js/${name}/${id}`] = v.name;
 }
 
 const m = measure(labels, actual);

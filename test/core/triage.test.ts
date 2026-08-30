@@ -126,3 +126,38 @@ test('A3 still fires when genuinely no production code runs', () => {
   assert.equal(r.verdict.name, 'FAKE');
   assert.equal(r.verdict.evidence[0]!.check, 'A3-test-constructed-only');
 });
+
+// Regression from the JS corpus: `assert.equal(save.mock.callCount(), 1)` reads
+// a mock, so its origin is mock-configured, and A4 accused it. But it fails the
+// moment the counted call is removed - that is WEAK, not an accusation.
+test('A4 does not fire on a call-count assertion - that is B7', () => {
+  const r = triage(M({
+    assertions: [A({ origins: ['mock-configured', 'literal'], callOnly: true })],
+  }));
+  assert.equal(r.verdict.name, 'WEAK');
+  assert.equal(r.verdict.evidence[0]!.check, 'B7-call-only');
+});
+
+test('A4 still fires on a genuine mock echo', () => {
+  const r = triage(M({
+    assertions: [A({ origins: ['mock-configured', 'literal'], callOnly: false })],
+  }));
+  assert.equal(r.verdict.name, 'FAKE');
+  assert.equal(r.verdict.evidence[0]!.check, 'A4-mock-echo');
+});
+
+// Regression from the noterot dogfood: a test can assert BY THROWING.
+// `execFileSync(...)` with no assert still fails the test on a non-zero exit,
+// so "no assertion" does not mean "nothing is checked" when production runs.
+test('A1 stands down when production code runs - it could throw', () => {
+  const r = triage(M({ assertions: [], productionCalls: 1 }));
+  assert.notEqual(r.verdict.name, 'FAKE');
+  assert.equal(r.verdict.name, 'UNKNOWN');
+  assert.match(r.obligations[0]!.why, /throw/i);
+});
+
+test('A1 still fires when nothing runs at all', () => {
+  const r = triage(M({ assertions: [], productionCalls: 0 }));
+  assert.equal(r.verdict.name, 'FAKE');
+  assert.equal(r.verdict.evidence[0]!.check, 'A1-no-assertion');
+});

@@ -42,9 +42,27 @@ export function triage(m: TestModel): TriageResult {
   }
 
   if (m.assertions.length === 0) {
+    // A test can assert BY THROWING. `execFileSync(...)` with no assert still
+    // fails the test on a non-zero exit; so does JSON.parse on bad input. A1's
+    // claim is "nothing is ever checked", which is false the moment production
+    // code runs at all, because that code can throw.
+    //
+    // Found by dogfooding on noterot, where `test('the scrub gate passes on a
+    // clean tree', () => { execFileSync('sh', ['scripts/scrub-check.sh']) })`
+    // was accused of checking nothing. It checks a great deal.
+    if (m.productionCalls > 0) {
+      return {
+        verdict: initialVerdict(),
+        obligations: [probeRequired(
+          m.test.id,
+          'no explicit assertion, but production code runs and could throw',
+        )],
+      };
+    }
     return {
       verdict: fake(
-        ev('A1-no-assertion', m, m.test.line, 'test body contains no assertion'),
+        ev('A1-no-assertion', m, m.test.line,
+           'test body contains no assertion and runs no production code'),
         'nothing is ever checked'),
       obligations: none,
     };
@@ -99,8 +117,15 @@ export function triage(m: TestModel): TriageResult {
     };
   }
 
+  // A4 means "asserts a mock's configured RETURN against the constant it was
+  // configured with". A call-count assertion is not that: `callCount() === 1`
+  // reads a mock, so its origin is mock-configured, but it would fail the
+  // moment the call it counts is removed. That is WEAK (B7), not an accusation.
+  // Caught by the JS corpus, where `assert.equal(save.mock.callCount(), 1)`
+  // was being reported FAKE.
   if (effective.every(a => a.origins.includes('mock-configured'))
-      && !effective.some(a => a.origins.includes('production-derived'))) {
+      && !effective.some(a => a.origins.includes('production-derived'))
+      && !effective.some(a => a.callOnly)) {
     return {
       verdict: fake(
         ev('A4-mock-echo', m, effective[0]!.line,

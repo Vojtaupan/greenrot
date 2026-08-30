@@ -7,6 +7,7 @@ import { exitCode, tally } from '../core/honesty.ts';
 import { renderHuman } from '../core/report/human.ts';
 import { renderJson } from '../core/report/json.ts';
 import { renderSarif } from '../core/report/sarif.ts';
+import { JsFrontend } from '../frontend/js/index.ts';
 import { PythonFrontend } from '../frontend/python/index.ts';
 import { VERSION } from '../index.ts';
 
@@ -68,10 +69,16 @@ export async function runCli(
   o: CliOptions,
   write: (s: string) => void,
 ): Promise<0 | 1 | 2> {
-  const fe = new PythonFrontend(o.exclude);
+  // Both frontends always run. A repo with only one language simply yields no
+  // tests from the other, and analyzeStructural merges cleanly - so a polyglot
+  // repo gets both audited without anyone having to pass a --lang flag.
+  const frontends = [new PythonFrontend(o.exclude), new JsFrontend(o.exclude)];
+  // Resolve once at the boundary. Everything downstream spawns child processes
+  // with their own cwd, and a relative root silently misdirects them.
+  const root = resolve(o.root);
   const r = o.staticOnly
-    ? await analyzeStructural(o.root, fe)
-    : await analyze(o.root, fe, { maxMutants: o.maxMutants });
+    ? await analyzeStructural(root, frontends)
+    : await analyze(root, frontends, { maxMutants: o.maxMutants });
 
   if (o.format === 'json') write(renderJson(r.verdicts, r.unknownReasons, r.ciFindings));
   else if (o.format === 'sarif') write(renderSarif(r.verdicts, r.ciFindings));

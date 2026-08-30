@@ -39,10 +39,13 @@ jobs:
       - name: false-positive gate
         run: npm run gate
 
-  # greenrot audits itself. The corpus is excluded because those fixtures are
-  # deliberately fake; --no-strict-unknown because this repo's own tests are
-  # TypeScript, which the Python frontend cannot see until the JS frontend
-  # lands. What this job actually enforces today is check 13 on our own CI.
+  # greenrot audits itself, now through its own JS frontend.
+  #
+  # The corpus is excluded because those fixtures are deliberately fake.
+  # --static because a full probe over 140 tests is minutes, not seconds, and
+  # --no-strict-unknown because a static pass legitimately vouches for nothing.
+  # What this job enforces is real: zero STRUCTURAL fakes in our own suite, and
+  # zero CI gates that cannot go red.
   selfaudit:
     runs-on: ubuntu-latest
     steps:

@@ -63,16 +63,36 @@ export async function probeTest(
   }
 
   const first = mutants[0]!;
+  const truncated = all.length > mutants.length;
   const e: Evidence = {
     kind: 'empirical',
     check: 'E-probe-total-insensitivity',
     file: first.file,
     line: first.line,
-    detail: `all ${mutants.length} mutation${mutants.length === 1 ? '' : 's'} of the code this test executes went undetected`,
+    detail: truncated
+      ? `detected none of the ${mutants.length} mutations tried (of ${all.length} available) in the code it executes`
+      : `detected none of the ${mutants.length} mutation${mutants.length === 1 ? '' : 's'} of the code it executes`,
   };
+
+  // WEAK, NOT FAKE - and this is the most important judgement in the probe.
+  //
+  // "Insensitive to every mutant we generated" is NOT the same claim as
+  // "cannot fail". The operator set is four families with one mutant per family
+  // per line - a narrow sample of the defects a test might catch - and
+  // --max-mutants truncates even that. greenrot's own suite proved the point:
+  // a scoped self-audit returned 23 FAKE verdicts, and inspection showed them
+  // all to be honest tests that simply did not detect the particular edits
+  // tried. `color codes are absent when color is off` would fail the moment
+  // paint() emitted codes; it just does not care whether an unrelated `===`
+  // flips.
+  //
+  // So the probe may now conclude only two things: REAL (proven honest, it
+  // caught a mutation) or WEAK (it caught none of the ones we tried). FAKE
+  // stays reserved for STRUCTURAL proof, where no assertion can vary at all.
+  // That is a narrower product claim, and it is the true one.
   return {
-    name: 'FAKE',
-    reason: 'the test is blind to every change in the code it runs',
+    name: 'WEAK',
+    reason: 'the test detected none of the mutations tried in the code it runs',
     evidence: [e],
   };
 }

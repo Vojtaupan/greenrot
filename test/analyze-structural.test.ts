@@ -10,7 +10,7 @@ const SHAPES = fileURLToPath(new URL('./corpus/python/shapes/', import.meta.url)
 const SIMPLE = fileURLToPath(new URL('./corpus/python/simple/', import.meta.url));
 
 test('the shapes corpus yields the expected structural verdicts', async () => {
-  const r = await analyzeStructural(SHAPES, new PythonFrontend());
+  const r = await analyzeStructural(SHAPES, [new PythonFrontend()]);
   const name = (t: string) => r.verdicts.get(`test_shapes.py::${t}`)?.name;
   assert.equal(name('test_no_assertion'), 'FAKE');
   assert.equal(name('test_tautology'), 'FAKE');
@@ -29,7 +29,7 @@ test('the shapes corpus yields the expected structural verdicts', async () => {
 });
 
 test('a repo with real tests is not declared clean before the probe runs', async () => {
-  const r = await analyzeStructural(SIMPLE, new PythonFrontend());
+  const r = await analyzeStructural(SIMPLE, [new PythonFrontend()]);
   const h = headline(tally([...r.verdicts.values()]), r.unknownReasons);
   assert.equal(h.canClaimClean, false, 'structural-only analysis must not claim clean');
   assert.ok(r.obligations.length > 0);
@@ -60,7 +60,7 @@ test('a frontend that crashes mid-run cannot produce a clean report', async () =
     run: async () => 'pass',
   };
 
-  const r = await analyzeStructural('/irrelevant', crashing);
+  const r = await analyzeStructural('/irrelevant', [crashing]);
   const h = headline(tally([...r.verdicts.values()]), r.unknownReasons);
   assert.equal(h.canClaimClean, false);
   assert.match(h.text, /frontend-crash/);
