@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
 import { mkdir, mkdtemp, rm } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { execPath } from 'node:process';
 import { promisify } from 'node:util';
 import type { RunOutcome, TestCase } from '../contract.ts';
@@ -62,9 +62,13 @@ export async function runOneTest(
 ): Promise<RunResult> {
   let covDir: string | null = null;
   if (opts.coverage) {
-    const base = join(root, SCRATCH_DIRNAME);
+    // ABSOLUTE, always. The child runs with cwd: root, so a relative
+    // NODE_V8_COVERAGE would be resolved against the CHILD's cwd and the
+    // coverage would land in a doubled path the parent never reads - which
+    // silently produced "no-mutants" for every test on the default `.` root.
+    const base = resolve(root, SCRATCH_DIRNAME);
     await mkdir(base, { recursive: true });
-    covDir = await mkdtemp(join(base, 'cov-'));
+    covDir = resolve(await mkdtemp(join(base, 'cov-')));
   }
 
   const env = { ...cleanEnv(), ...(covDir ? { NODE_V8_COVERAGE: covDir } : {}) };

@@ -1,9 +1,7 @@
 {
   "_comment": "Ground truth. Fix the classifier, never the label. A label edited to make the gate pass is the exact self-deception this tool exists to detect.",
-
   "python/simple/test_basic.py::test_add_returns_sum": "REAL",
   "python/simple/test_basic.py::test_is_even": "REAL",
-
   "python/shapes/test_shapes.py::test_no_assertion": "FAKE",
   "python/shapes/test_shapes.py::test_tautology": "FAKE",
   "python/shapes/test_shapes.py::test_only_test_constructed": "FAKE",
@@ -12,10 +10,25 @@
   "python/shapes/test_shapes.py::test_broad_exception": "WEAK",
   "python/shapes/test_shapes.py::test_swallowed": "FAKE",
   "python/shapes/test_selfmock.py::test_add_is_mocked_away": "REAL",
-
   "python/tricky/test_looks_fake_but_real.py::test_label_uppercases_the_name_from_the_repo": "REAL",
   "python/tricky/test_looks_fake_but_real.py::test_label_handles_a_missing_row": "REAL",
   "python/tricky/test_looks_fake_but_real.py::test_spy_list_is_filled_by_production_code": "REAL",
   "python/tricky/test_looks_real_but_fake.py::test_service_label_behaviour": "FAKE",
-  "python/tricky/test_looks_real_but_fake.py::test_repo_is_wired": "WEAK"
+  "python/tricky/test_looks_real_but_fake.py::test_repo_is_wired": "WEAK",
+  "js/simple/basic.test.js::add returns the sum": "REAL",
+  "js/simple/basic.test.js::isEven > is true for even numbers": "REAL",
+  "js/simple/basic.test.js::isEven > is skipped on purpose": "FAKE",
+  "js/shapes/shapes.test.js::no assertion": "FAKE",
+  "js/shapes/shapes.test.js::tautology": "FAKE",
+  "js/shapes/shapes.test.js::only test constructed": "FAKE",
+  "js/shapes/shapes.test.js::mock echo": "FAKE",
+  "js/shapes/shapes.test.js::call only": "WEAK",
+  "js/shapes/shapes.test.js::broad throw": "WEAK",
+  "js/shapes/shapes.test.js::swallowed": "FAKE",
+  "js/shapes/shapes.test.js::genuinely real": "REAL",
+  "js/tricky/looks-fake-but-real.test.js::label uppercases the name from the repo": "REAL",
+  "js/tricky/looks-fake-but-real.test.js::label handles a missing row": "REAL",
+  "js/tricky/looks-fake-but-real.test.js::spy array is filled by production code": "REAL",
+  "js/tricky/looks-real-but-fake.test.js::service label behaviour": "FAKE",
+  "js/tricky/looks-real-but-fake.test.js::repo is wired": "WEAK"
 }

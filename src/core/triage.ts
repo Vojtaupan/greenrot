@@ -99,8 +99,15 @@ export function triage(m: TestModel): TriageResult {
     };
   }
 
+  // A4 means "asserts a mock's configured RETURN against the constant it was
+  // configured with". A call-count assertion is not that: `callCount() === 1`
+  // reads a mock, so its origin is mock-configured, but it would fail the
+  // moment the call it counts is removed. That is WEAK (B7), not an accusation.
+  // Caught by the JS corpus, where `assert.equal(save.mock.callCount(), 1)`
+  // was being reported FAKE.
   if (effective.every(a => a.origins.includes('mock-configured'))
-      && !effective.some(a => a.origins.includes('production-derived'))) {
+      && !effective.some(a => a.origins.includes('production-derived'))
+      && !effective.some(a => a.callOnly)) {
     return {
       verdict: fake(
         ev('A4-mock-echo', m, effective[0]!.line,

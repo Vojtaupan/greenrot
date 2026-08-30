@@ -32,7 +32,7 @@ export function offsetsToLines(source: string, ranges: readonly V8Range[]): numb
     return lo + 1;
   };
 
-  const linesIn = (r: V8Range): number[] => {
+  const linesTouched = (r: V8Range): number[] => {
     const from = lineAt(Math.max(0, r.startOffset));
     const to = lineAt(Math.max(0, Math.min(source.length, r.endOffset) - 1));
     const out: number[] = [];
@@ -40,9 +40,32 @@ export function offsetsToLines(source: string, ranges: readonly V8Range[]): numb
     return out;
   };
 
+  /**
+   * Lines a zero-count range covers ENTIRELY.
+   *
+   * Subtracting every line a zero range merely touches is wrong, and it was
+   * silently costing mutation targets. In
+   *
+   *     if (row === null) return 'missing';
+   *
+   * the untaken alternative branch produces a zero range that STARTS on this
+   * line, so touch-based subtraction removed the whole line - even though the
+   * comparison on it certainly ran. Branch-y lines are exactly the ones worth
+   * mutating, so this lost the most valuable targets first.
+   */
+  const linesFullyDead = (r: V8Range): number[] => {
+    const out: number[] = [];
+    for (const l of linesTouched(r)) {
+      const lineStart = starts[l - 1] ?? 0;
+      const lineEnd = (starts[l] ?? source.length + 1) - 1;
+      if (r.startOffset <= lineStart && lineEnd <= r.endOffset) out.push(l);
+    }
+    return out;
+  };
+
   const covered = new Set<number>();
-  for (const r of ranges) if (r.count > 0) for (const l of linesIn(r)) covered.add(l);
-  for (const r of ranges) if (r.count === 0) for (const l of linesIn(r)) covered.delete(l);
+  for (const r of ranges) if (r.count > 0) for (const l of linesTouched(r)) covered.add(l);
+  for (const r of ranges) if (r.count === 0) for (const l of linesFullyDead(r)) covered.delete(l);
   return [...covered].sort((a, b) => a - b);
 }
 
