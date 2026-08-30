@@ -1,0 +1,69 @@
+name: ci
+on: [push, pull_request]
+
+jobs:
+  # The TypeScript test suite runs directly from .ts via Node's type stripping,
+  # which only exists from 22.6. Node 20 is covered by the `smoke` job below,
+  # against the built artifact - which is what a consumer actually runs.
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        node: [22, 24]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '${{ matrix.node }}' }
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - run: python -m pip install --upgrade pip pytest
+      - run: npm install
+      - run: npm run typecheck
+      - run: npm test
+
+  # The publish gate. A single false FAKE on the labelled corpus blocks release,
+  # because FAKE is an accusation. This job exists to go red.
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24 }
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - run: python -m pip install --upgrade pip pytest
+      - run: npm install
+      - run: npm run build
+      - name: false-positive gate
+        run: npm run gate
+
+  # greenrot audits itself, now through its own JS frontend.
+  #
+  # The corpus is excluded because those fixtures are deliberately fake.
+  # --static because a full probe over 140 tests is minutes, not seconds, and
+  # --no-strict-unknown because a static pass legitimately vouches for nothing.
+  # What this job enforces is real: zero STRUCTURAL fakes in our own suite, and
+  # zero CI gates that cannot go red.
+  selfaudit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24 }
+      - run: npm install
+      - run: npm run build
+      - name: greenrot audits greenrot
+        run: node dist/surface/cli.js . --static --exclude test/corpus --no-strict-unknown
+
+  # Proves the shipped artifact runs on the oldest supported Node.
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - run: npm install
+      - run: npm run build
+      - run: node dist/surface/cli.js --version
