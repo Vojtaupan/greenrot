@@ -21,7 +21,7 @@ const labels = JSON.parse(
 const actual = {};
 for (const name of ROOTS) {
   const root = fileURLToPath(new URL(`../test/corpus/python/${name}/`, import.meta.url));
-  const r = await analyze(root, new PythonFrontend(), { maxMutants: 6 });
+  const r = await analyze(root, [new PythonFrontend()], { maxMutants: 6 });
   for (const [id, v] of r.verdicts) actual[`python/${name}/${id}`] = v.name;
 }
 

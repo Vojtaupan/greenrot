@@ -65,12 +65,38 @@ async function auditCiFiles(root: string): Promise<Evidence[]> {
  * leaves an obligation behind, and every failure becomes an UNKNOWN carrying a
  * reason - which the honesty gate then refuses to render as clean.
  */
-export async function analyzeStructural(root: string, fe: Frontend): Promise<StructuralResult> {
+/**
+ * Stage 1 across every frontend. The CI audit runs ONCE - it is
+ * language-agnostic, and running it per frontend would report each D13 finding
+ * as many times as there are languages.
+ */
+export async function analyzeStructural(
+  root: string,
+  frontends: readonly Frontend[],
+): Promise<StructuralResult> {
   const verdicts = new Map<string, Verdict>();
   const obligations: Obligation[] = [];
   const unknownReasons = new Map<UnknownReason, number>();
-
   const ciFindings = await auditCiFiles(root);
+
+  for (const fe of frontends) {
+    const part = await analyzeOneFrontend(root, fe);
+    for (const [id, v] of part.verdicts) verdicts.set(id, v);
+    obligations.push(...part.obligations);
+    for (const [code, n] of part.unknownReasons) {
+      unknownReasons.set(code, (unknownReasons.get(code) ?? 0) + n);
+    }
+  }
+
+  return { verdicts, obligations, unknownReasons, ciFindings };
+}
+
+/** One frontend's structural pass. No CI audit - the caller owns that. */
+async function analyzeOneFrontend(root: string, fe: Frontend): Promise<StructuralResult> {
+  const verdicts = new Map<string, Verdict>();
+  const obligations: Obligation[] = [];
+  const unknownReasons = new Map<UnknownReason, number>();
+  const ciFindings: Evidence[] = [];
 
   const bump = (c: UnknownReason) => unknownReasons.set(c, (unknownReasons.get(c) ?? 0) + 1);
 
@@ -107,23 +133,29 @@ export async function analyzeStructural(root: string, fe: Frontend): Promise<Str
  */
 export async function analyze(
   root: string,
-  fe: Frontend,
+  frontends: readonly Frontend[],
   opts: ProbeOptions = {},
 ): Promise<StructuralResult> {
-  const base = await analyzeStructural(root, fe);
+  const base = await analyzeStructural(root, frontends);
 
-  const discovered = await fe.discover(root);
-  if (isFrontendError(discovered)) return base;
-  const byId = new Map(discovered.map(t => [t.id, t]));
+  // Each obligation must be probed by the frontend that raised it. A Python
+  // frontend cannot run a JS test, and handing it one would produce an error
+  // that the probe would honestly - but uselessly - report as UNKNOWN.
+  const owners = new Map<string, { fe: Frontend; tc: TestCase }>();
+  for (const fe of frontends) {
+    const discovered = await fe.discover(root);
+    if (isFrontendError(discovered)) continue;
+    for (const tc of discovered) owners.set(tc.id, { fe, tc });
+  }
 
   for (const o of base.obligations) {
     const current = base.verdicts.get(o.testId);
-    const tc = byId.get(o.testId);
+    const owner = owners.get(o.testId);
     // Only UNKNOWN is probeable. FAKE and REAL are proven; WEAK is a structural
     // conclusion the probe is not equipped to overturn (see triage).
-    if (!current || !tc || isTerminal(current) || current.name !== 'UNKNOWN') continue;
+    if (!current || !owner || isTerminal(current) || current.name !== 'UNKNOWN') continue;
 
-    const proven = await probeTest(root, fe, tc, opts);
+    const proven = await probeTest(root, owner.fe, owner.tc, opts);
     base.verdicts.set(o.testId, discharge(current, proven));
     if (proven.name === 'UNKNOWN' && proven.code) {
       base.unknownReasons.set(proven.code, (base.unknownReasons.get(proven.code) ?? 0) + 1);

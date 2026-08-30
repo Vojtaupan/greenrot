@@ -70,8 +70,8 @@ export async function runCli(
 ): Promise<0 | 1 | 2> {
   const fe = new PythonFrontend(o.exclude);
   const r = o.staticOnly
-    ? await analyzeStructural(o.root, fe)
-    : await analyze(o.root, fe, { maxMutants: o.maxMutants });
+    ? await analyzeStructural(o.root, [fe])
+    : await analyze(o.root, [fe], { maxMutants: o.maxMutants });
 
   if (o.format === 'json') write(renderJson(r.verdicts, r.unknownReasons, r.ciFindings));
   else if (o.format === 'sarif') write(renderSarif(r.verdicts, r.ciFindings));
