@@ -30,5 +30,6 @@
   "js/tricky/looks-fake-but-real.test.js::label handles a missing row": "REAL",
   "js/tricky/looks-fake-but-real.test.js::spy array is filled by production code": "REAL",
   "js/tricky/looks-real-but-fake.test.js::service label behaviour": "FAKE",
-  "js/tricky/looks-real-but-fake.test.js::repo is wired": "WEAK"
+  "js/tricky/looks-real-but-fake.test.js::repo is wired": "WEAK",
+  "js/tricky/looks-fake-but-real.test.js::asserts by throwing, with no assert call at all": "REAL"
 }

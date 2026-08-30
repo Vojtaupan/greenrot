@@ -145,3 +145,19 @@ test('A4 still fires on a genuine mock echo', () => {
   assert.equal(r.verdict.name, 'FAKE');
   assert.equal(r.verdict.evidence[0]!.check, 'A4-mock-echo');
 });
+
+// Regression from the noterot dogfood: a test can assert BY THROWING.
+// `execFileSync(...)` with no assert still fails the test on a non-zero exit,
+// so "no assertion" does not mean "nothing is checked" when production runs.
+test('A1 stands down when production code runs - it could throw', () => {
+  const r = triage(M({ assertions: [], productionCalls: 1 }));
+  assert.notEqual(r.verdict.name, 'FAKE');
+  assert.equal(r.verdict.name, 'UNKNOWN');
+  assert.match(r.obligations[0]!.why, /throw/i);
+});
+
+test('A1 still fires when nothing runs at all', () => {
+  const r = triage(M({ assertions: [], productionCalls: 0 }));
+  assert.equal(r.verdict.name, 'FAKE');
+  assert.equal(r.verdict.evidence[0]!.check, 'A1-no-assertion');
+});

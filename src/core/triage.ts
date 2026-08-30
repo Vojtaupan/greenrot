@@ -42,9 +42,27 @@ export function triage(m: TestModel): TriageResult {
   }
 
   if (m.assertions.length === 0) {
+    // A test can assert BY THROWING. `execFileSync(...)` with no assert still
+    // fails the test on a non-zero exit; so does JSON.parse on bad input. A1's
+    // claim is "nothing is ever checked", which is false the moment production
+    // code runs at all, because that code can throw.
+    //
+    // Found by dogfooding on noterot, where `test('the scrub gate passes on a
+    // clean tree', () => { execFileSync('sh', ['scripts/scrub-check.sh']) })`
+    // was accused of checking nothing. It checks a great deal.
+    if (m.productionCalls > 0) {
+      return {
+        verdict: initialVerdict(),
+        obligations: [probeRequired(
+          m.test.id,
+          'no explicit assertion, but production code runs and could throw',
+        )],
+      };
+    }
     return {
       verdict: fake(
-        ev('A1-no-assertion', m, m.test.line, 'test body contains no assertion'),
+        ev('A1-no-assertion', m, m.test.line,
+           'test body contains no assertion and runs no production code'),
         'nothing is ever checked'),
       obligations: none,
     };

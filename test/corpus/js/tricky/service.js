@@ -16,3 +16,7 @@ export function collect(items, sink) {
   }
   return items.length;
 }
+
+export function toJson(value) {
+  return JSON.stringify(value);
+}

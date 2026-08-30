@@ -3,7 +3,7 @@
 // false-positive gate blocks the release - which is the point.
 import { test, mock } from 'node:test';
 import assert from 'node:assert/strict';
-import { Service, collect } from './service.js';
+import { Service, collect, toJson } from './service.js';
 
 test('label uppercases the name from the repo', () => {
   const repo = { find: mock.fn(() => ({ name: 'ada' })) };
@@ -25,4 +25,11 @@ test('spy array is filled by production code', () => {
     seen.push(n);
   });
   assert.deepEqual(seen, [1, 3]);
+});
+
+test('asserts by throwing, with no assert call at all', () => {
+  // No assertion, but JSON.parse throws on bad input - so this test fails if
+  // toJson() ever emits something malformed. "No assertion" is not "checks
+  // nothing" when production code runs.
+  JSON.parse(toJson({ a: 1 }));
 });
